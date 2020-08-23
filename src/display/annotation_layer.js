@@ -460,6 +460,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         element = document.createElement("input");
         element.type = "text";
         element.setAttribute("value", textContent);
+        element.setAttribute('data-rotation', this.page.rotate);
       }
 
       element.addEventListener("input", function (event) {

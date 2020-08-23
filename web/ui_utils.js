@@ -817,6 +817,12 @@ class EventBus {
   }
 
   dispatch(eventName) {
+    // send event to parent
+    window.parent.postMessage({
+      viewerId: window.getUrlParameterByName('viewerId'),
+      eventName: eventName,
+    }, '*');
+
     const eventListeners = this._listeners[eventName];
     if (!eventListeners || eventListeners.length === 0) {
       if (

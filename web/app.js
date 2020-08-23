@@ -435,7 +435,7 @@ const PDFViewerApplication = {
       l10n: this.l10n,
       textLayerMode: AppOptions.get("textLayerMode"),
       imageResourcesPath: AppOptions.get("imageResourcesPath"),
-      renderInteractiveForms: AppOptions.get("renderInteractiveForms"),
+      renderInteractiveForms: true,
       enablePrintAutoRotate: AppOptions.get("enablePrintAutoRotate"),
       useOnlyCssZoom: AppOptions.get("useOnlyCssZoom"),
       maxCanvasPixels: AppOptions.get("maxCanvasPixels"),
