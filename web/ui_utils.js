@@ -599,6 +599,11 @@ function isDataSchema(url) {
  * @returns {string} Guessed PDF filename.
  */
 function getPDFFileNameFromURL(url, defaultFilename = "document.pdf") {
+  var providedFileName = window.getUrlParameterByName('saveName');
+  if (providedFileName) {
+    return providedFileName;
+  }
+
   if (typeof url !== "string") {
     return defaultFilename;
   }
