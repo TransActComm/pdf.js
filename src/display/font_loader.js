@@ -121,9 +121,7 @@ class BaseFontLoader {
   }
 
   get isFontLoadingAPISupported() {
-    const supported =
-      typeof this._document !== "undefined" && !!this._document.fonts;
-    return shadow(this, "isFontLoadingAPISupported", supported);
+    return shadow(this, "isFontLoadingAPISupported", !!this._document?.fonts);
   }
 
   // eslint-disable-next-line getter-return
@@ -173,7 +171,7 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
           const m = /Mozilla\/5.0.*?rv:(\d+).*? Gecko/.exec(
             navigator.userAgent
           );
-          if (m && m[1] >= 14) {
+          if (m?.[1] >= 14) {
             supported = true;
           }
           // TODO - other browsers...
@@ -352,7 +350,7 @@ class FontFaceObject {
       isEvalSupported = true,
       disableFontFace = false,
       ignoreErrors = false,
-      onUnsupportedFeature = null,
+      onUnsupportedFeature,
       fontRegistry = null,
     }
   ) {
@@ -407,11 +405,9 @@ class FontFaceObject {
       if (!this.ignoreErrors) {
         throw ex;
       }
-      if (this._onUnsupportedFeature) {
-        this._onUnsupportedFeature({
-          featureId: UNSUPPORTED_FEATURES.errorFontGetPath,
-        });
-      }
+      this._onUnsupportedFeature({
+        featureId: UNSUPPORTED_FEATURES.errorFontGetPath,
+      });
       warn(`getPathGenerator - ignoring character: "${ex}".`);
 
       return (this.compiledGlyphs[character] = function (c, size) {

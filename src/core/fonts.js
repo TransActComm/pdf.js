@@ -12,6 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable no-var */
 
 import {
   assert,
@@ -589,6 +590,7 @@ var Font = (function FontClosure() {
     this.defaultWidth = properties.defaultWidth;
     this.composite = properties.composite;
     this.cMap = properties.cMap;
+    this.capHeight = properties.capHeight / PDF_GLYPH_SPACE_UNITS;
     this.ascent = properties.ascent / PDF_GLYPH_SPACE_UNITS;
     this.descent = properties.descent / PDF_GLYPH_SPACE_UNITS;
     this.fontMatrix = properties.fontMatrix;
@@ -622,7 +624,7 @@ var Font = (function FontClosure() {
         // attempting to recover by assuming that no file exists.
         warn('Font file is empty in "' + name + '" (' + this.loadedName + ")");
       }
-      this.fallbackToSystemFont();
+      this.fallbackToSystemFont(properties);
       return;
     }
 
@@ -679,7 +681,7 @@ var Font = (function FontClosure() {
       }
     } catch (e) {
       warn(e);
-      this.fallbackToSystemFont();
+      this.fallbackToSystemFont(properties);
       return;
     }
 
@@ -1308,7 +1310,7 @@ var Font = (function FontClosure() {
       return data;
     },
 
-    fallbackToSystemFont: function Font_fallbackToSystemFont() {
+    fallbackToSystemFont(properties) {
       this.missingFile = true;
       // The file data is not specified. Trying to fix the font name
       // to be used with the canvas.font.
@@ -1318,11 +1320,12 @@ var Font = (function FontClosure() {
       let fontName = name.replace(/[,_]/g, "-").replace(/\s/g, "");
       var stdFontMap = getStdFontMap(),
         nonStdFontMap = getNonStdFontMap();
-      var isStandardFont =
-        !!stdFontMap[fontName] ||
-        !!(nonStdFontMap[fontName] && stdFontMap[nonStdFontMap[fontName]]);
-      fontName = stdFontMap[fontName] || nonStdFontMap[fontName] || fontName;
+      const isStandardFont = !!stdFontMap[fontName];
+      const isMappedToStandardFont = !!(
+        nonStdFontMap[fontName] && stdFontMap[nonStdFontMap[fontName]]
+      );
 
+      fontName = stdFontMap[fontName] || nonStdFontMap[fontName] || fontName;
       this.bold = fontName.search(/bold/gi) !== -1;
       this.italic =
         fontName.search(/oblique/gi) !== -1 ||
@@ -1332,14 +1335,20 @@ var Font = (function FontClosure() {
       // name ArialBlack for example will be replaced by Helvetica.
       this.black = name.search(/Black/g) !== -1;
 
+      // Use 'name' instead of 'fontName' here because the original
+      // name ArialNarrow for example will be replaced by Helvetica.
+      const isNarrow = name.search(/Narrow/g) !== -1;
+
       // if at least one width is present, remeasure all chars when exists
-      this.remeasure = Object.keys(this.widths).length > 0;
+      this.remeasure =
+        (!isStandardFont || isNarrow) && Object.keys(this.widths).length > 0;
       if (
-        isStandardFont &&
+        (isStandardFont || isMappedToStandardFont) &&
         type === "CIDFontType2" &&
         this.cidEncoding.startsWith("Identity-")
       ) {
-        const GlyphMapForStandardFonts = getGlyphMapForStandardFonts();
+        const GlyphMapForStandardFonts = getGlyphMapForStandardFonts(),
+          cidToGidMap = properties.cidToGidMap;
         // Standard fonts might be embedded as CID font without glyph mapping.
         // Building one based on GlyphMapForStandardFonts.
         const map = [];
@@ -1355,6 +1364,16 @@ var Font = (function FontClosure() {
           const SupplementalGlyphMapForCalibri = getSupplementalGlyphMapForCalibri();
           for (const charCode in SupplementalGlyphMapForCalibri) {
             map[+charCode] = SupplementalGlyphMapForCalibri[charCode];
+          }
+        }
+        // Always update the glyph mapping with the `cidToGidMap` when it exists
+        // (fixes issue12418_reduced.pdf).
+        if (cidToGidMap) {
+          for (const charCode in map) {
+            const cid = map[charCode];
+            if (cidToGidMap[cid] !== undefined) {
+              map[+charCode] = cidToGidMap[cid];
+            }
           }
         }
 
@@ -1610,7 +1629,12 @@ var Font = (function FontClosure() {
             continue;
           }
 
-          if (platformId === 0 && encodingId === 0) {
+          if (
+            platformId === 0 &&
+            (encodingId === /* Unicode Default */ 0 ||
+              encodingId === /* Unicode 1.1 */ 1 ||
+              encodingId === /* Unicode BMP */ 3)
+          ) {
             useTable = true;
             // Continue the loop since there still may be a higher priority
             // table.
@@ -2792,32 +2816,24 @@ var Font = (function FontClosure() {
         var cmapEncodingId = cmapTable.encodingId;
         var cmapMappings = cmapTable.mappings;
         var cmapMappingsLength = cmapMappings.length;
-
-        // The spec seems to imply that if the font is symbolic the encoding
-        // should be ignored, this doesn't appear to work for 'preistabelle.pdf'
-        // where the the font is symbolic and it has an encoding.
+        let baseEncoding = [];
         if (
-          (properties.hasEncoding &&
-            ((cmapPlatformId === 3 && cmapEncodingId === 1) ||
-              (cmapPlatformId === 1 && cmapEncodingId === 0))) ||
-          (cmapPlatformId === -1 &&
-          cmapEncodingId === -1 && // Temporary hack
-            !!getEncoding(properties.baseEncodingName))
+          properties.hasEncoding &&
+          (properties.baseEncodingName === "MacRomanEncoding" ||
+            properties.baseEncodingName === "WinAnsiEncoding")
         ) {
-          // Temporary hack
-          // When no preferred cmap table was found and |baseEncodingName| is
-          // one of the predefined encodings, we seem to obtain a better
-          // |charCodeToGlyphId| map from the code below (fixes bug 1057544).
-          // TODO: Note that this is a hack which should be removed as soon as
-          //       we have proper support for more exotic cmap tables.
+          baseEncoding = getEncoding(properties.baseEncodingName);
+        }
 
-          var baseEncoding = [];
-          if (
-            properties.baseEncodingName === "MacRomanEncoding" ||
-            properties.baseEncodingName === "WinAnsiEncoding"
-          ) {
-            baseEncoding = getEncoding(properties.baseEncodingName);
-          }
+        // If the font has an encoding and is not symbolic then follow the
+        // rules in section 9.6.6.4 of the spec on how to map 3,1 and 1,0
+        // cmaps.
+        if (
+          properties.hasEncoding &&
+          !this.isSymbolicFont &&
+          ((cmapPlatformId === 3 && cmapEncodingId === 1) ||
+            (cmapPlatformId === 1 && cmapEncodingId === 0))
+        ) {
           var glyphsUnicodeMap = getGlyphsUnicode();
           for (let charCode = 0; charCode < 256; charCode++) {
             var glyphName, standardGlyphName;
@@ -2845,29 +2861,15 @@ var Font = (function FontClosure() {
               unicodeOrCharCode = MacRomanEncoding.indexOf(standardGlyphName);
             }
 
-            var found = false;
             for (let i = 0; i < cmapMappingsLength; ++i) {
               if (cmapMappings[i].charCode !== unicodeOrCharCode) {
                 continue;
               }
               charCodeToGlyphId[charCode] = cmapMappings[i].glyphId;
-              found = true;
               break;
             }
-            if (!found && properties.glyphNames) {
-              // Try to map using the post table.
-              var glyphId = properties.glyphNames.indexOf(glyphName);
-              // The post table ought to use the same kind of glyph names as the
-              // `differences` array, but check the standard ones as a fallback.
-              if (glyphId === -1 && standardGlyphName !== glyphName) {
-                glyphId = properties.glyphNames.indexOf(standardGlyphName);
-              }
-              if (glyphId > 0 && hasGlyph(glyphId)) {
-                charCodeToGlyphId[charCode] = glyphId;
-              }
-            }
           }
-        } else if (cmapPlatformId === 0 && cmapEncodingId === 0) {
+        } else if (cmapPlatformId === 0) {
           // Default Unicode semantics, use the charcodes as is.
           for (let i = 0; i < cmapMappingsLength; ++i) {
             charCodeToGlyphId[cmapMappings[i].charCode] =
@@ -2895,6 +2897,19 @@ var Font = (function FontClosure() {
               charCode &= 0xff;
             }
             charCodeToGlyphId[charCode] = cmapMappings[i].glyphId;
+          }
+        }
+
+        // Last, try to map any missing charcodes using the post table.
+        if (properties.glyphNames && baseEncoding.length) {
+          for (let i = 0; i < 256; ++i) {
+            if (charCodeToGlyphId[i] === undefined && baseEncoding[i]) {
+              glyphName = baseEncoding[i];
+              const glyphId = properties.glyphNames.indexOf(glyphName);
+              if (glyphId > 0 && hasGlyph(glyphId)) {
+                charCodeToGlyphId[i] = glyphId;
+              }
+            }
           }
         }
       }
@@ -3088,21 +3103,21 @@ var Font = (function FontClosure() {
       builder.addTable(
         "head",
         "\x00\x01\x00\x00" + // Version number
-        "\x00\x00\x10\x00" + // fontRevision
-        "\x00\x00\x00\x00" + // checksumAdjustement
-        "\x5F\x0F\x3C\xF5" + // magicNumber
-        "\x00\x00" + // Flags
-        safeString16(unitsPerEm) + // unitsPerEM
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // creation date
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // modifification date
-        "\x00\x00" + // xMin
-        safeString16(properties.descent) + // yMin
-        "\x0F\xFF" + // xMax
-        safeString16(properties.ascent) + // yMax
-        string16(properties.italicAngle ? 2 : 0) + // macStyle
-        "\x00\x11" + // lowestRecPPEM
-        "\x00\x00" + // fontDirectionHint
-        "\x00\x00" + // indexToLocFormat
+          "\x00\x00\x10\x00" + // fontRevision
+          "\x00\x00\x00\x00" + // checksumAdjustement
+          "\x5F\x0F\x3C\xF5" + // magicNumber
+          "\x00\x00" + // Flags
+          safeString16(unitsPerEm) + // unitsPerEM
+          "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // creation date
+          "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // modifification date
+          "\x00\x00" + // xMin
+          safeString16(properties.descent) + // yMin
+          "\x0F\xFF" + // xMax
+          safeString16(properties.ascent) + // yMax
+          string16(properties.italicAngle ? 2 : 0) + // macStyle
+          "\x00\x11" + // lowestRecPPEM
+          "\x00\x00" + // fontDirectionHint
+          "\x00\x00" + // indexToLocFormat
           "\x00\x00"
       ); // glyphDataFormat
 
@@ -3110,21 +3125,21 @@ var Font = (function FontClosure() {
       builder.addTable(
         "hhea",
         "\x00\x01\x00\x00" + // Version number
-        safeString16(properties.ascent) + // Typographic Ascent
-        safeString16(properties.descent) + // Typographic Descent
-        "\x00\x00" + // Line Gap
-        "\xFF\xFF" + // advanceWidthMax
-        "\x00\x00" + // minLeftSidebearing
-        "\x00\x00" + // minRightSidebearing
-        "\x00\x00" + // xMaxExtent
-        safeString16(properties.capHeight) + // caretSlopeRise
-        safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + // caretSlopeRun
-        "\x00\x00" + // caretOffset
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // metricDataFormat
+          safeString16(properties.ascent) + // Typographic Ascent
+          safeString16(properties.descent) + // Typographic Descent
+          "\x00\x00" + // Line Gap
+          "\xFF\xFF" + // advanceWidthMax
+          "\x00\x00" + // minLeftSidebearing
+          "\x00\x00" + // minRightSidebearing
+          "\x00\x00" + // xMaxExtent
+          safeString16(properties.capHeight) + // caretSlopeRise
+          safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + // caretSlopeRun
+          "\x00\x00" + // caretOffset
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // metricDataFormat
           string16(numGlyphs)
       ); // Number of HMetrics
 
@@ -3200,7 +3215,10 @@ var Font = (function FontClosure() {
       return shadow(this, "spaceWidth", width);
     },
 
-    charToGlyph: function Font_charToGlyph(charcode, isSpace) {
+    /**
+     * @private
+     */
+    _charToGlyph(charcode, isSpace = false) {
       var fontCharCode, width, operatorListId;
 
       var widthCode = charcode;
@@ -3324,13 +3342,13 @@ var Font = (function FontClosure() {
           i += length;
           // Space is char with code 0x20 and length 1 in multiple-byte codes.
           var isSpace = length === 1 && chars.charCodeAt(i - 1) === 0x20;
-          glyph = this.charToGlyph(charcode, isSpace);
+          glyph = this._charToGlyph(charcode, isSpace);
           glyphs.push(glyph);
         }
       } else {
         for (i = 0, ii = chars.length; i < ii; ++i) {
           charcode = chars.charCodeAt(i);
-          glyph = this.charToGlyph(charcode, charcode === 0x20);
+          glyph = this._charToGlyph(charcode, charcode === 0x20);
           glyphs.push(glyph);
         }
       }
@@ -3339,8 +3357,92 @@ var Font = (function FontClosure() {
       return (charsCache[charsCacheKey] = glyphs);
     },
 
+    /**
+     * Chars can have different sizes (depends on the encoding).
+     * @param {String} a string encoded with font encoding.
+     * @returns {Array<Array<number>>} the positions of each char in the string.
+     */
+    getCharPositions(chars) {
+      // This function doesn't use a cache because
+      // it's called only when saving or printing.
+      const positions = [];
+
+      if (this.cMap) {
+        const c = Object.create(null);
+        let i = 0;
+        while (i < chars.length) {
+          this.cMap.readCharCode(chars, i, c);
+          const length = c.length;
+          positions.push([i, i + length]);
+          i += length;
+        }
+      } else {
+        for (let i = 0, ii = chars.length; i < ii; ++i) {
+          positions.push([i, i + 1]);
+        }
+      }
+
+      return positions;
+    },
+
     get glyphCacheValues() {
       return Object.values(this.glyphCache);
+    },
+
+    /**
+     * Encode a js string using font encoding.
+     * The resulting array contains an encoded string at even positions
+     * (can be empty) and a non-encoded one at odd positions.
+     * @param {String} a js string.
+     * @returns {Array<String>} an array of encoded strings or non-encoded ones.
+     */
+    encodeString(str) {
+      const buffers = [];
+      const currentBuf = [];
+
+      // buffers will contain: encoded, non-encoded, encoded, ...
+      // currentBuf is pushed in buffers each time there is a change.
+      // So when buffers.length is odd then the last string is an encoded one
+      // and currentBuf contains non-encoded chars.
+      const hasCurrentBufErrors = () => buffers.length % 2 === 1;
+
+      for (let i = 0, ii = str.length; i < ii; i++) {
+        const unicode = str.codePointAt(i);
+        if (unicode > 0xd7ff && (unicode < 0xe000 || unicode > 0xfffd)) {
+          // unicode is represented by two uint16
+          i++;
+        }
+        if (this.toUnicode) {
+          const char = String.fromCodePoint(unicode);
+          const charCode = this.toUnicode.charCodeOf(char);
+          if (charCode !== -1) {
+            if (hasCurrentBufErrors()) {
+              buffers.push(currentBuf.join(""));
+              currentBuf.length = 0;
+            }
+            const charCodeLength = this.cMap
+              ? this.cMap.getCharCodeLength(charCode)
+              : 1;
+            for (let j = charCodeLength - 1; j >= 0; j--) {
+              currentBuf.push(
+                String.fromCharCode((charCode >> (8 * j)) & 0xff)
+              );
+            }
+            continue;
+          }
+        }
+
+        // unicode can't be encoded
+        if (!hasCurrentBufErrors()) {
+          buffers.push(currentBuf.join(""));
+          currentBuf.length = 0;
+        }
+        currentBuf.push(String.fromCodePoint(unicode));
+      }
+
+      buffers.push(currentBuf.join(""));
+
+      return buffers;
     },
   };
 
@@ -3358,6 +3460,9 @@ var ErrorFont = (function ErrorFontClosure() {
   ErrorFont.prototype = {
     charsToGlyphs: function ErrorFont_charsToGlyphs() {
       return [];
+    },
+    encodeString: function ErrorFont_encodeString(chars) {
+      return [chars];
     },
     exportData(extraProperties = false) {
       return { error: this.error };
@@ -3913,11 +4018,11 @@ var CFFFont = (function CFFFontClosure() {
 })();
 
 export {
-  SEAC_ANALYSIS_ENABLED,
   ErrorFont,
   Font,
   FontFlags,
-  ToUnicodeMap,
-  IdentityToUnicodeMap,
   getFontType,
+  IdentityToUnicodeMap,
+  SEAC_ANALYSIS_ENABLED,
+  ToUnicodeMap,
 };
