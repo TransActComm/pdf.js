@@ -1009,6 +1009,7 @@ function buildMinified(defines, dir) {
     gulp
       .src("web/compressed.tracemonkey-pldi-09.pdf")
       .pipe(gulp.dest(dir + "web")),
+    gulp.src("web/anchorme.min.js").pipe(gulp.dest(dir + "web")),
   ]);
 }
 
@@ -1072,6 +1073,7 @@ async function parseMinified(dir) {
   var viewerFiles = {
     "pdf.js": pdfFile,
     "viewer.js": fs.readFileSync(dir + "/web/viewer.js").toString(),
+    "anchorme.min.js": fs.readFileSync(dir + "/web/anchorme.min.js").toString(),
   };
 
   console.log();

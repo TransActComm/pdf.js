@@ -613,21 +613,21 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         beforeInputValue: null,
       };
 
-      if (this.data.multiLine) {
-        element = document.createElement("textarea");
-        element.textContent = textContent;
-      } else {
-        element = document.createElement("input");
-        element.type = "text";
-        element.setAttribute("value", textContent);
-        element.setAttribute("data-rotation", this.page.rotate);
+      element = document.createElement("div");
+      element.textContent = textContent;
+      // eslint-disable-next-line no-unsanitized/property
+      element.innerHTML = window.attemptToHyperLink(textContent);
+      element.setAttribute("data-rotation", this.page.rotate);
+      if (!this.data.readOnly) {
+        element.className = "input-div";
+        element.setAttribute("contenteditable", true);
       }
 
-      elementData.userValue = textContent;
+      elementData.userValue = element.textContent;
       element.setAttribute("id", id);
 
       element.addEventListener("input", function (event) {
-        storage.setValue(id, { value: event.target.value });
+        storage.setValue(id, { value: event.target.textContent });
       });
 
       let blurListener = event => {
@@ -638,6 +638,13 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         // Can be commented out as we don't need this functionality
         // event.target.setSelectionRange(0, 0);
         elementData.beforeInputSelectionRange = null;
+
+        if (window.anchorme) {
+          // eslint-disable-next-line no-unsanitized/property
+          event.target.innerHTML = window.attemptToHyperLink(
+            event.target.textContent
+          );
+        }
       };
 
       if (this.enableScripting && this.hasJSActions) {
@@ -830,6 +837,8 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
     } else {
       element = document.createElement("div");
       element.textContent = this.data.fieldValue;
+      // eslint-disable-next-line no-unsanitized/property
+      element.innerHTML = window.attemptToHyperLink(element.textContent);
       element.style.verticalAlign = "middle";
       element.style.display = "table-cell";
     }

@@ -262,4 +262,27 @@ window.getUrlParameterByName = function (name, url) {
   return decodeURIComponent(results[2].replace(/\+/g, " "));
 };
 
+window.attemptToHyperLink = function (rawString) {
+  const safeString = rawString
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/(&lt;(\/?(a|i))&gt;)/gi, "<$2>");
+
+  if (window.anchorme) {
+    return window.anchorme({
+      input: safeString,
+      options: {
+        exclude: string => {
+          return string.startsWith("{{");
+        },
+        attributes: {
+          contenteditable: false,
+          target: "_blank",
+        },
+      },
+    });
+  }
+  return safeString;
+};
+
 export { PDFViewerApplication, AppOptions as PDFViewerApplicationOptions };

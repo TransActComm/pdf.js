@@ -41,6 +41,7 @@
 }
 
 .annotationLayer .textWidgetAnnotation input,
+.annotationLayer .textWidgetAnnotation .input-div,
 .annotationLayer .textWidgetAnnotation textarea,
 .annotationLayer .choiceWidgetAnnotation select,
 .annotationLayer .buttonWidgetAnnotation.checkBox input,
@@ -68,6 +69,10 @@
   font: message-box;
   font-size: 9px;
   resize: none;
+}
+
+.annotationLayer .textWidgetAnnotation .input-div {
+  overflow: hidden;
 }
 
 .annotationLayer .textWidgetAnnotation input[disabled],

@@ -19,6 +19,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
   "../../node_modules/pdfjs-dist/build/pdf.worker.js";
 
 var DEFAULT_URL = "../../test/pdfs/prefilled_f1040.pdf";
+// var DEFAULT_URL = "../../test/pdfs/transact/large_readonly_title.pdf";
+// var DEFAULT_URL = "../../test/pdfs/transact/00eseapfe12 chinese.pdf";
 var DEFAULT_SCALE = 1.0;
 
 var container = document.getElementById("pageContainer");
