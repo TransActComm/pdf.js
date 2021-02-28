@@ -620,7 +620,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         element = document.createElement("input");
         element.type = "text";
         element.setAttribute("value", textContent);
-        element.setAttribute('data-rotation', this.page.rotate);
+        element.setAttribute("data-rotation", this.page.rotate);
       }
 
       elementData.userValue = textContent;
@@ -634,7 +634,9 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         if (elementData.formattedValue) {
           event.target.value = elementData.formattedValue;
         }
-        event.target.setSelectionRange(0, 0);
+        // Caused a bug in safari,
+        // Can be commented out as we don't need this functionality
+        // event.target.setSelectionRange(0, 0);
         elementData.beforeInputSelectionRange = null;
       };
 

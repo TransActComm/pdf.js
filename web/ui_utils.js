@@ -617,9 +617,11 @@ function isDataSchema(url) {
  * @returns {string} Guessed PDF filename.
  */
 function getPDFFileNameFromURL(url, defaultFilename = "document.pdf") {
-  var providedFileName = window.getUrlParameterByName('saveName');
-  if (providedFileName) {
-    return providedFileName;
+  if (typeof window !== "undefined") {
+    const providedFileName = window.getUrlParameterByName("saveName");
+    if (providedFileName) {
+      return providedFileName;
+    }
   }
 
   if (typeof url !== "string") {
@@ -849,10 +851,15 @@ class EventBus {
 
   dispatch(eventName) {
     // send event to parent
-    window.parent.postMessage({
-      viewerId: window.getUrlParameterByName('viewerId'),
-      eventName: eventName,
-    }, '*');
+    if (typeof window !== "undefined") {
+      window.parent.postMessage(
+        {
+          viewerId: window.getUrlParameterByName("viewerId"),
+          eventName,
+        },
+        "*"
+      );
+    }
 
     const eventListeners = this._listeners[eventName];
     if (!eventListeners || eventListeners.length === 0) {
